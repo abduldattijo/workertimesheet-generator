@@ -13,6 +13,17 @@ class TimesheetPDFGenerator:
         self.margins = 50
         self.font_size = 10
         self.font_name = 'Helvetica'
+        self.standard_start = "10:00"
+        self.standard_end = "12:00"
+        self.standard_hours = 2
+    
+    def calculate_monthly_hours(self, hours_per_week):
+        """Calculate total monthly hours based on 4.33 weeks per month"""
+        return round(hours_per_week * 4.33, 2)
+    
+    def get_work_slots(self, total_monthly_hours):
+        """Calculate how many 2-hour slots we need per month"""
+        return round(total_monthly_hours / 2)  # Since each slot is 2 hours
     
     def generate_timesheet_data(self, year, month, employee_name, hours_per_week, 
                               work_window_start, work_window_end, sick_days=None, 
@@ -22,6 +33,9 @@ class TimesheetPDFGenerator:
             sick_days = []
         if holidays is None:
             holidays = []
+        
+        total_monthly_hours = self.calculate_monthly_hours(hours_per_week)
+        needed_slots = self.get_work_slots(total_monthly_hours)
         
         data = []
         
@@ -40,6 +54,8 @@ class TimesheetPDFGenerator:
         
         # Calendar data
         cal = calendar.monthcalendar(year, month)
+        slots_used = 0
+        
         for week in cal:
             for day in week:
                 if day == 0:
@@ -53,13 +69,18 @@ class TimesheetPDFGenerator:
                 is_sick = day in sick_days
                 is_weekend = weekday in ["Saturday", "Sunday"]
                 
-                if is_holiday or is_sick or is_weekend:
+                if is_holiday:
+                    data.append([weekday, date_str, "Holiday", "Holiday", '0'])
+                elif is_sick:
+                    data.append([weekday, date_str, "Sick", "Sick", '0'])
+                elif is_weekend:
                     data.append([weekday, date_str, '0', '0', '0'])
+                elif slots_used < needed_slots:
+                    # Add standard 2-hour slot
+                    data.append([weekday, date_str, self.standard_start, self.standard_end, str(self.standard_hours)])
+                    slots_used += 1
                 else:
-                    work_start = f"{work_window_start:02d}:00"
-                    work_duration = 2
-                    work_end = f"{(work_window_start + 2):02d}:00"
-                    data.append([weekday, date_str, work_start, work_end, str(work_duration)])
+                    data.append([weekday, date_str, '0', '0', '0'])
         
         # Footer
         data.append([''])
