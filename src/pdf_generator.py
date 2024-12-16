@@ -3,7 +3,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
 from reportlab.lib.units import inch
-from datetime import datetime
+from datetime import datetime, timedelta
 import calendar
 import io
 
@@ -25,14 +25,23 @@ class TimesheetPDFGenerator:
         """Calculate how many 2-hour slots we need per month"""
         return round(total_monthly_hours / 2)  # Since each slot is 2 hours
     
+    def is_working_day(self, weekday, first_workday, working_days):
+        """Determine if a given weekday is a working day"""
+        # Convert weekday to 0-based index relative to first working day
+        relative_day = (weekday - first_workday) % 7
+        return relative_day < working_days
+    
     def generate_timesheet_data(self, year, month, employee_name, hours_per_week, 
                               work_window_start, work_window_end, sick_days=None, 
-                              holidays=None):
+                              holidays=None, national_holidays=None, working_days=5,
+                              first_workday=0):
         """Generate timesheet data structure"""
         if sick_days is None:
             sick_days = []
         if holidays is None:
             holidays = []
+        if national_holidays is None:
+            national_holidays = []
         
         total_monthly_hours = self.calculate_monthly_hours(hours_per_week)
         needed_slots = self.get_work_slots(total_monthly_hours)
@@ -46,7 +55,7 @@ class TimesheetPDFGenerator:
         
         # Statistics row
         data.append(['SICKDAYS', 'HOLIDAYS', 'NATIONAL HOLIDAYS', ''])
-        data.append([len(sick_days), len(holidays), '0', ''])
+        data.append([len(sick_days), len(holidays), len(national_holidays), ''])
         data.append([''])
         
         # Column headers
@@ -62,25 +71,29 @@ class TimesheetPDFGenerator:
                     continue
                     
                 date = datetime(year, month, day)
-                weekday = date.strftime("%A")
+                weekday = date.weekday()  # 0 = Monday, 6 = Sunday
+                weekday_name = date.strftime("%A")
                 date_str = date.strftime("%d.%m.%Y")
                 
                 is_holiday = day in holidays
                 is_sick = day in sick_days
-                is_weekend = weekday in ["Saturday", "Sunday"]
+                is_national_holiday = day in national_holidays
+                is_workday = self.is_working_day(weekday, first_workday, working_days)
                 
-                if is_holiday:
-                    data.append([weekday, date_str, "Holiday", "Holiday", '0'])
-                elif is_sick:
-                    data.append([weekday, date_str, "Sick", "Sick", '0'])
-                elif is_weekend:
-                    data.append([weekday, date_str, '0', '0', '0'])
+                if is_sick:
+                    data.append([weekday_name, date_str, "Sick", "Sick", '0'])
+                elif is_holiday:
+                    data.append([weekday_name, date_str, "Holiday", "Holiday", '0'])
+                elif is_national_holiday:
+                    data.append([weekday_name, date_str, "National Holiday", "National Holiday", '0'])
+                elif not is_workday:
+                    data.append([weekday_name, date_str, '0', '0', '0'])
                 elif slots_used < needed_slots:
                     # Add standard 2-hour slot
-                    data.append([weekday, date_str, self.standard_start, self.standard_end, str(self.standard_hours)])
+                    data.append([weekday_name, date_str, self.standard_start, self.standard_end, str(self.standard_hours)])
                     slots_used += 1
                 else:
-                    data.append([weekday, date_str, '0', '0', '0'])
+                    data.append([weekday_name, date_str, '0', '0', '0'])
         
         # Footer
         data.append([''])

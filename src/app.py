@@ -1,3 +1,4 @@
+# app.py
 import streamlit as st
 import base64
 from datetime import datetime
@@ -37,12 +38,18 @@ def main():
                 help="Number of contracted hours per week"
             )
             
-            work_start = st.number_input(
-                "Work Window Start (24h format)",
-                min_value=0,
-                max_value=23,
-                value=10,
-                help="Start time of the work day in 24-hour format"
+            # Workweek configuration
+            workweek_type = st.selectbox(
+                "Workweek Type",
+                options=["5-day week", "6-day week"],
+                help="Select whether employee works 5 or 6 days per week"
+            )
+            
+            # First working day
+            first_workday = st.selectbox(
+                "First Working Day",
+                options=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+                help="Select which day of the week is the first working day"
             )
         
         with col2:
@@ -61,7 +68,7 @@ def main():
                 help="Select the month for the timesheet"
             )
         
-        st.subheader("Absences")
+        st.subheader("Absences and Holidays")
         
         col3, col4 = st.columns(2)
         
@@ -70,11 +77,16 @@ def main():
                 "Sick Days",
                 help="Enter sick days as comma-separated numbers (e.g., 1,15,22)"
             )
+            
+            holidays_str = st.text_input(
+                "Personal Holidays",
+                help="Enter holiday days as comma-separated numbers (e.g., 5,6,7,8)"
+            )
         
         with col4:
-            holidays_str = st.text_input(
-                "Holidays",
-                help="Enter holiday days as comma-separated numbers (e.g., 5,6,7,8)"
+            national_holidays_str = st.text_input(
+                "National Holidays",
+                help="Enter national holiday days as comma-separated numbers (e.g., 1,25)"
             )
         
         submitted = st.form_submit_button("Generate Timesheet")
@@ -92,6 +104,14 @@ def main():
                 # Parse dates
                 sick_days = parse_dates(sick_days_str)
                 holidays = parse_dates(holidays_str)
+                national_holidays = parse_dates(national_holidays_str)
+                
+                # Convert workweek type to number of working days
+                working_days = 6 if workweek_type == "6-day week" else 5
+                
+                # Convert first working day to integer (0 = Monday, 6 = Sunday)
+                weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+                first_workday_num = weekdays.index(first_workday)
                 
                 # Generate timesheet data
                 data = pdf_generator.generate_timesheet_data(
@@ -99,10 +119,13 @@ def main():
                     month=month,
                     employee_name=employee_name,
                     hours_per_week=hours_per_week,
-                    work_window_start=work_start,
-                    work_window_end=work_start + 5,
+                    work_window_start=10,  # Fixed to 10:00
+                    work_window_end=12,    # Fixed to 12:00
                     sick_days=sick_days,
-                    holidays=holidays
+                    holidays=holidays,
+                    national_holidays=national_holidays,
+                    working_days=working_days,
+                    first_workday=first_workday_num
                 )
                 
                 # Create PDF
@@ -114,7 +137,6 @@ def main():
                 
                 st.success("✅ Timesheet generated successfully!")
                 
-                # Place download button outside the form
                 st.download_button(
                     label="📥 Download Timesheet PDF",
                     data=pdf_bytes,
@@ -127,6 +149,7 @@ def main():
                 st.error(f"Error: {str(e)}")
             except Exception as e:
                 st.error("An unexpected error occurred. Please try again.")
+                raise e
 
 if __name__ == "__main__":
     main()
