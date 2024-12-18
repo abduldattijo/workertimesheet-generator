@@ -121,6 +121,32 @@ class TimesheetGenerator:
         
         return pd.DataFrame(data)
 
+def update_row_based_on_status(edited_df):
+    """Update row values based on status changes"""
+    for index, row in edited_df.iterrows():
+        if row['Status'] == 'Sick':
+            edited_df.at[index, 'Work Started'] = 'Sick'
+            edited_df.at[index, 'Work Finished'] = 'Sick'
+            edited_df.at[index, 'Total Hours'] = 0
+        elif row['Status'] == 'Holiday':
+            edited_df.at[index, 'Work Started'] = 'Holiday'
+            edited_df.at[index, 'Work Finished'] = 'Holiday'
+            edited_df.at[index, 'Total Hours'] = 0
+        elif row['Status'] == 'National Holiday':
+            edited_df.at[index, 'Work Started'] = 'National Holiday'
+            edited_df.at[index, 'Work Finished'] = 'National Holiday'
+            edited_df.at[index, 'Total Hours'] = 0
+        elif row['Status'] == 'Off':
+            edited_df.at[index, 'Work Started'] = '0'
+            edited_df.at[index, 'Work Finished'] = '0'
+            edited_df.at[index, 'Total Hours'] = 0
+        elif row['Status'] == 'Work' and row['Work Started'] in ['Sick', 'Holiday', 'National Holiday', '0']:
+            # Reset to default work hours if changing to Work status
+            edited_df.at[index, 'Work Started'] = '10:00'
+            edited_df.at[index, 'Work Finished'] = '12:00'
+            edited_df.at[index, 'Total Hours'] = 2
+    return edited_df
+
 def main():
     st.set_page_config(page_title="Interactive Timesheet Generator", layout="wide")
     
@@ -242,13 +268,12 @@ def main():
         st.write("### Edit Timesheet")
         st.markdown("""
         Instructions:
-        - Double-click any cell to edit
-        - For Status, choose from: Work, Sick, Holiday, National Holiday, Off
-        - Time format: HH:MM (e.g., 10:00)
-        - Edit hours as needed
+        - Select a status for any day to automatically update its times and hours
+        - Status options: Work, Sick, Holiday, National Holiday, Off
+        - Time and hours will update automatically based on status
         """)
         
-        # Use session state for editing
+        # Use session state for editing with dynamic updates
         edited_df = st.data_editor(
             st.session_state.edited_df,
             column_config={
@@ -259,15 +284,15 @@ def main():
                 ),
                 "Work Started": st.column_config.TextColumn(
                     "Work Started",
-                    help="Format: HH:MM"
+                    help="Updates automatically based on status"
                 ),
                 "Work Finished": st.column_config.TextColumn(
                     "Work Finished",
-                    help="Format: HH:MM"
+                    help="Updates automatically based on status"
                 ),
                 "Total Hours": st.column_config.NumberColumn(
                     "Total Hours",
-                    help="Hours worked",
+                    help="Updates automatically based on status",
                     min_value=0,
                     max_value=24,
                     step=0.5
@@ -275,8 +300,12 @@ def main():
             },
             hide_index=True,
             num_rows="fixed",
-            key="timesheet_editor"
+            key="timesheet_editor",
+            disabled=["Work Started", "Work Finished", "Total Hours"]
         )
+        
+        # Update related columns based on status
+        edited_df = update_row_based_on_status(edited_df)
         
         # Store edited data back to session state
         st.session_state.edited_df = edited_df
