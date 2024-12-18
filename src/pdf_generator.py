@@ -25,16 +25,13 @@ class TimesheetPDFGenerator:
         """Calculate how many 2-hour slots we need per month"""
         return round(total_monthly_hours / 2)  # Since each slot is 2 hours
     
-    def is_working_day(self, weekday, first_workday, working_days):
+    def is_working_day(self, weekday, working_day_indices):
         """Determine if a given weekday is a working day"""
-        # Convert weekday to 0-based index relative to first working day
-        relative_day = (weekday - first_workday) % 7
-        return relative_day < working_days
+        return weekday in working_day_indices
     
     def generate_timesheet_data(self, year, month, employee_name, hours_per_week, 
                               work_window_start, work_window_end, sick_days=None, 
-                              holidays=None, national_holidays=None, working_days=5,
-                              first_workday=0):
+                              holidays=None, national_holidays=None, working_day_indices=None):
         """Generate timesheet data structure"""
         if sick_days is None:
             sick_days = []
@@ -42,6 +39,8 @@ class TimesheetPDFGenerator:
             holidays = []
         if national_holidays is None:
             national_holidays = []
+        if working_day_indices is None:
+            working_day_indices = [0, 1, 2, 3, 4]  # Default to Monday-Friday
         
         total_monthly_hours = self.calculate_monthly_hours(hours_per_week)
         needed_slots = self.get_work_slots(total_monthly_hours)
@@ -78,7 +77,7 @@ class TimesheetPDFGenerator:
                 is_holiday = day in holidays
                 is_sick = day in sick_days
                 is_national_holiday = day in national_holidays
-                is_workday = self.is_working_day(weekday, first_workday, working_days)
+                is_workday = self.is_working_day(weekday, working_day_indices)
                 
                 if is_sick:
                     data.append([weekday_name, date_str, "Sick", "Sick", '0'])

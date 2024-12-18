@@ -38,19 +38,19 @@ def main():
                 help="Number of contracted hours per week"
             )
             
-            # Workweek configuration
-            workweek_type = st.selectbox(
-                "Workweek Type",
-                options=["5-day week", "6-day week"],
-                help="Select whether employee works 5 or 6 days per week"
-            )
-            
-            # First working day
-            first_workday = st.selectbox(
-                "First Working Day",
-                options=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
-                help="Select which day of the week is the first working day"
-            )
+            # Working days selection
+            st.write("Select Working Days:")
+            working_days = {}
+            col_a, col_b = st.columns(2)
+            with col_a:
+                working_days["Monday"] = st.checkbox("Monday", value=True)
+                working_days["Tuesday"] = st.checkbox("Tuesday", value=True)
+                working_days["Wednesday"] = st.checkbox("Wednesday", value=True)
+                working_days["Thursday"] = st.checkbox("Thursday", value=True)
+            with col_b:
+                working_days["Friday"] = st.checkbox("Friday", value=True)
+                working_days["Saturday"] = st.checkbox("Saturday")
+                working_days["Sunday"] = st.checkbox("Sunday")
         
         with col2:
             year = st.number_input(
@@ -93,6 +93,11 @@ def main():
     
     # Handle form submission and download button outside the form
     if submitted:
+        # Check if at least one working day is selected
+        if not any(working_days.values()):
+            st.error("Please select at least one working day")
+            return
+            
         # Validate input
         errors = validate_input(employee_name, hours_per_week, year, month)
         
@@ -106,12 +111,8 @@ def main():
                 holidays = parse_dates(holidays_str)
                 national_holidays = parse_dates(national_holidays_str)
                 
-                # Convert workweek type to number of working days
-                working_days = 6 if workweek_type == "6-day week" else 5
-                
-                # Convert first working day to integer (0 = Monday, 6 = Sunday)
-                weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-                first_workday_num = weekdays.index(first_workday)
+                # Convert working days to list of indices
+                working_day_indices = [i for i, (day, checked) in enumerate(working_days.items()) if checked]
                 
                 # Generate timesheet data
                 data = pdf_generator.generate_timesheet_data(
@@ -124,8 +125,7 @@ def main():
                     sick_days=sick_days,
                     holidays=holidays,
                     national_holidays=national_holidays,
-                    working_days=working_days,
-                    first_workday=first_workday_num
+                    working_day_indices=working_day_indices
                 )
                 
                 # Create PDF
