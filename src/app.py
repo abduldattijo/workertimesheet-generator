@@ -124,7 +124,7 @@ class TimesheetGenerator:
 def main():
     st.set_page_config(page_title="Interactive Timesheet Generator", layout="wide")
     
-    # ADDED: Initialize session state
+    # Initialize session state
     if 'edited_df' not in st.session_state:
         st.session_state.edited_df = None
     if 'generated_timesheet' not in st.session_state:
@@ -160,20 +160,20 @@ def main():
             year = st.number_input("Year", min_value=2020, max_value=2030, value=datetime.now().year)
             month = st.selectbox("Month", range(1, 13), format_func=lambda x: calendar.month_name[x])
             
-            st.markdown("Enter days as single numbers (e.g., 1, 2, 3) or full dates (DD.MM.YYYY)")
+            st.markdown("Enter days as single numbers (e.g., 1, 2, 3)")
             sick_days = st.text_input(
                 "Sick Days",
-                help="Example: 1, 2, 3 or 01.05.2024"
+                help="Example: 1, 2, 3"
             )
             
             holidays = st.text_input(
                 "Holidays",
-                help="Example: 1, 2, 3 or 01.05.2024"
+                help="Example: 1, 2, 3"
             )
             
             national_holidays = st.text_input(
                 "National Holidays",
-                help="Example: 1, 2, 3 or 01.05.2024"
+                help="Example: 1, 2, 3"
             )
         
         generate_button = st.form_submit_button("Generate Timesheet")
@@ -183,7 +183,7 @@ def main():
             st.error("Please enter an employee name")
             return
         
-        # ADDED: Reset state if employee changes
+        # Reset state if employee changes
         if st.session_state.current_employee != employee_name:
             st.session_state.edited_df = None
             st.session_state.generated_timesheet = False
@@ -209,10 +209,6 @@ def main():
                                 day = int(d)
                                 if 1 <= day <= calendar.monthrange(year, month)[1]:
                                     dates.append(f"{day:02d}.{month:02d}.{year}")
-                            else:
-                                day, m, y = map(int, d.split('.'))
-                                if m == month and y == year:
-                                    dates.append(f"{day:02d}.{month:02d}.{year}")
                         except ValueError:
                             st.error(f"Invalid date format in: {d}")
                             continue
@@ -227,16 +223,6 @@ def main():
                 'holiday': parse_dates(holidays),
                 'national': parse_dates(national_holidays)
             }
-            
-            for category, dates in specific_dates.items():
-                valid_dates = []
-                for date in dates:
-                    day, m, y = map(int, date.split('.'))
-                    if m == month and y == year and 1 <= day <= calendar.monthrange(year, month)[1]:
-                        valid_dates.append(date)
-                    else:
-                        st.warning(f"Ignoring {category} date {date} - not in selected month")
-                specific_dates[category] = valid_dates
 
         except ValueError as e:
             st.error(f"Error parsing dates: {str(e)}")
@@ -247,11 +233,11 @@ def main():
             year, month, employee_name, hours_per_week, working_days, specific_dates
         )
         
-        # UPDATED: Store in session state
+        # Store in session state
         st.session_state.edited_df = df
         st.session_state.generated_timesheet = True
 
-    # UPDATED: Show editor and export options if timesheet exists
+    # Show editor and export options if timesheet exists
     if st.session_state.generated_timesheet and st.session_state.edited_df is not None:
         st.write("### Edit Timesheet")
         st.markdown("""
@@ -262,7 +248,7 @@ def main():
         - Edit hours as needed
         """)
         
-        # UPDATED: Use session state for editing
+        # Use session state for editing
         edited_df = st.data_editor(
             st.session_state.edited_df,
             column_config={
@@ -292,38 +278,32 @@ def main():
             key="timesheet_editor"
         )
         
-        # UPDATED: Store edited data back to session state
+        # Store edited data back to session state
         st.session_state.edited_df = edited_df
         
+        # Export options
         st.write("### Export Options")
-        col3, col4 = st.columns(2)
         
-        with col3:
-            excel_buffer = io.BytesIO()
-            edited_df.to_excel(excel_buffer, index=False, engine='openpyxl')
-            excel_buffer.seek(0)
-            
-            st.download_button(
-                label="📥 Download as Excel",
-                data=excel_buffer,
-                file_name=f"timesheet_{st.session_state.current_employee.replace(' ', '_')}_{year}_{month}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+        # CSV export
+        csv = edited_df.to_csv(index=False).encode('utf-8')
         
-        with col4:
-            csv = edited_df.to_csv(index=False).encode('utf-8')
-            
-            st.download_button(
-                label="📥 Download as CSV",
-                data=csv,
-                file_name=f"timesheet_{st.session_state.current_employee.replace(' ', '_')}_{year}_{month}.csv",
-                mime="text/csv"
-            )
+        st.download_button(
+            label="📥 Download as CSV",
+            data=csv,
+            file_name=f"timesheet_{st.session_state.current_employee.replace(' ', '_')}_{year}_{month}.csv",
+            mime="text/csv"
+        )
+
+        # Display Excel import instructions
+        st.info("""💡 Tip: You can open the CSV file in Excel by:
+                1. Opening Excel
+                2. Going to Data -> From Text/CSV
+                3. Selecting the downloaded CSV file""")
         
         # Display statistics
         total_hours = edited_df['Total Hours'].sum()
         
-        # Count actual days from the DataFrame status
+        # Count days from the DataFrame status
         work_days = len(edited_df[edited_df['Status'] == 'Work'])
         sick_days = len(edited_df[edited_df['Status'] == 'Sick'])
         holidays = len(edited_df[edited_df['Status'] == 'Holiday'])
@@ -339,3 +319,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+    
