@@ -1,3 +1,4 @@
+# app.py
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -87,7 +88,6 @@ class TimesheetGenerator:
                 weekday_name = date.strftime("%A")
                 date_str = f"{day:02d}.{month:02d}.{year}"
                 
-                # Determine day status
                 if date_str in specific_dates['sick']:
                     status = "Sick"
                     hours = 0
@@ -124,6 +124,14 @@ class TimesheetGenerator:
 def main():
     st.set_page_config(page_title="Interactive Timesheet Generator", layout="wide")
     
+    # ADDED: Initialize session state
+    if 'edited_df' not in st.session_state:
+        st.session_state.edited_df = None
+    if 'generated_timesheet' not in st.session_state:
+        st.session_state.generated_timesheet = False
+    if 'current_employee' not in st.session_state:
+        st.session_state.current_employee = None
+    
     st.title("Interactive Timesheet Generator")
     st.markdown("Generate, edit, and export timesheets")
     
@@ -137,14 +145,12 @@ def main():
             employee_name = st.text_input("Employee Name")
             hours_per_week = st.number_input("Hours per Week", min_value=1, max_value=40, value=5)
             
-            # Workweek type selection
             workweek_type = st.radio(
                 "Select Workweek Type",
                 options=["5-day week", "6-day week"],
                 horizontal=True
             )
             
-            # First working day selection
             first_workday = st.selectbox(
                 "Select First Working Day",
                 options=["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
@@ -154,21 +160,20 @@ def main():
             year = st.number_input("Year", min_value=2020, max_value=2030, value=datetime.now().year)
             month = st.selectbox("Month", range(1, 13), format_func=lambda x: calendar.month_name[x])
             
-            st.markdown("Enter dates in DD.MM.YYYY format, separated by commas")
-            # Specific dates inputs
+            st.markdown("Enter days as single numbers (e.g., 1, 2, 3) or full dates (DD.MM.YYYY)")
             sick_days = st.text_input(
                 "Sick Days",
-                help="Example: 15.5.2024, 16.5.2024"
+                help="Example: 1, 2, 3 or 01.05.2024"
             )
             
             holidays = st.text_input(
                 "Holidays",
-                help="Example: 20.5.2024, 21.5.2024"
+                help="Example: 1, 2, 3 or 01.05.2024"
             )
             
             national_holidays = st.text_input(
                 "National Holidays",
-                help="Example: 1.5.2024"
+                help="Example: 1, 2, 3 or 01.05.2024"
             )
         
         generate_button = st.form_submit_button("Generate Timesheet")
@@ -178,39 +183,44 @@ def main():
             st.error("Please enter an employee name")
             return
         
-        # Convert workweek settings to working days
+        # ADDED: Reset state if employee changes
+        if st.session_state.current_employee != employee_name:
+            st.session_state.edited_df = None
+            st.session_state.generated_timesheet = False
+            st.session_state.current_employee = employee_name
+        
         days_map = {"Monday": 0, "Tuesday": 1, "Wednesday": 2, "Thursday": 3, 
                    "Friday": 4, "Saturday": 5, "Sunday": 6}
         first_day_num = days_map[first_workday]
         
-        # Generate working days based on workweek type and first day
         num_days = 5 if workweek_type == "5-day week" else 6
         working_days = [(first_day_num + i) % 7 for i in range(num_days)]
         
-        # Parse dates with proper format handling
         def parse_dates(date_str):
             if not date_str:
                 return []
             try:
                 dates = []
-                for d in date_str.split(','):
-                    if d.strip():
-                        # Split the date and handle single digits
-                        parts = [p.strip() for p in d.strip().split('.')]
-                        if len(parts) == 1:  # If only day is provided
-                            day = int(parts[0])
-                            dates.append(f"{day:02d}.{month:02d}.{year}")
-                        elif len(parts) == 3:  # If full date is provided
-                            day, m, y = map(int, parts)
-                            dates.append(f"{day:02d}.{month:02d}.{year}")
-                        else:
-                            st.error(f"Invalid date format: {d}. Please use either D or DD.MM.YYYY")
+                input_days = [d.strip() for d in str(date_str).split(',')]
+                for d in input_days:
+                    if d:
+                        try:
+                            if d.isdigit():
+                                day = int(d)
+                                if 1 <= day <= calendar.monthrange(year, month)[1]:
+                                    dates.append(f"{day:02d}.{month:02d}.{year}")
+                            else:
+                                day, m, y = map(int, d.split('.'))
+                                if m == month and y == year:
+                                    dates.append(f"{day:02d}.{month:02d}.{year}")
+                        except ValueError:
+                            st.error(f"Invalid date format in: {d}")
                             continue
                 return dates
-            except ValueError:
-                st.error(f"Invalid date format in: {date_str}. Please use either single digits (e.g., 2, 15) or full dates (DD.MM.YYYY)")
+            except Exception as e:
+                st.error(f"Error parsing dates: {str(e)}")
                 return []
-        # Parse and validate dates
+        
         try:
             specific_dates = {
                 'sick': parse_dates(sick_days),
@@ -218,7 +228,6 @@ def main():
                 'national': parse_dates(national_holidays)
             }
             
-            # Validate dates are within the selected month
             for category, dates in specific_dates.items():
                 valid_dates = []
                 for date in dates:
@@ -233,12 +242,17 @@ def main():
             st.error(f"Error parsing dates: {str(e)}")
             return
         
-        # Generate timesheet
+        # Generate initial timesheet
         df = generator.generate_timesheet_data(
             year, month, employee_name, hours_per_week, working_days, specific_dates
         )
         
-        # Show editable grid
+        # UPDATED: Store in session state
+        st.session_state.edited_df = df
+        st.session_state.generated_timesheet = True
+
+    # UPDATED: Show editor and export options if timesheet exists
+    if st.session_state.generated_timesheet and st.session_state.edited_df is not None:
         st.write("### Edit Timesheet")
         st.markdown("""
         Instructions:
@@ -248,8 +262,9 @@ def main():
         - Edit hours as needed
         """)
         
+        # UPDATED: Use session state for editing
         edited_df = st.data_editor(
-            df,
+            st.session_state.edited_df,
             column_config={
                 "Status": st.column_config.SelectboxColumn(
                     "Status",
@@ -274,14 +289,16 @@ def main():
             },
             hide_index=True,
             num_rows="fixed",
+            key="timesheet_editor"
         )
         
-        # Export options
+        # UPDATED: Store edited data back to session state
+        st.session_state.edited_df = edited_df
+        
         st.write("### Export Options")
         col3, col4 = st.columns(2)
         
         with col3:
-            # Excel export
             excel_buffer = io.BytesIO()
             edited_df.to_excel(excel_buffer, index=False, engine='openpyxl')
             excel_buffer.seek(0)
@@ -289,23 +306,24 @@ def main():
             st.download_button(
                 label="📥 Download as Excel",
                 data=excel_buffer,
-                file_name=f"timesheet_{employee_name.replace(' ', '_')}_{year}_{month}.xlsx",
+                file_name=f"timesheet_{st.session_state.current_employee.replace(' ', '_')}_{year}_{month}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
         
         with col4:
-            # CSV export
             csv = edited_df.to_csv(index=False).encode('utf-8')
             
             st.download_button(
                 label="📥 Download as CSV",
                 data=csv,
-                file_name=f"timesheet_{employee_name.replace(' ', '_')}_{year}_{month}.csv",
+                file_name=f"timesheet_{st.session_state.current_employee.replace(' ', '_')}_{year}_{month}.csv",
                 mime="text/csv"
             )
         
         # Display statistics
         total_hours = edited_df['Total Hours'].sum()
+        
+        # Count actual days from the DataFrame status
         work_days = len(edited_df[edited_df['Status'] == 'Work'])
         sick_days = len(edited_df[edited_df['Status'] == 'Sick'])
         holidays = len(edited_df[edited_df['Status'] == 'Holiday'])
